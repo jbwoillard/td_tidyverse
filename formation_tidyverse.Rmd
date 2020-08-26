@@ -1,0 +1,353 @@
+---
+title: "formation tidyverse"
+author: "jbw"
+date: "25/08/2020"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=F, message =F)
+```
+
+## Chargement jeu de donnée
+```{r}
+library(nycflights13)
+library(tidyverse)
+
+View(flights)
+```
+
+- nycflights13: This data frame contains all 336,776 flights that departed from New York City in 2013. The data comes from the US Bureau of Transportation Statistics, and is documented in ?flights
+
+##  dplyr basics
+
+-Pick observations by their values **(filter())**.
+-Reorder the rows **(arrange())**.
+-Pick variables by their names **(select())**.
+-Create new variables with functions of existing variables **(mutate())**.
+-Collapse many values down to a single summary **(summarise())**.
+
+These can all be used in conjunction with **group_by()** which changes the scope of each function from operating on the entire dataset to operating on it group-by-group. These six functions provide the verbs for a language of data manipulation.
+
+## Slice
+
+Le verbe slice sélectionne des lignes du tableau selon leur position. On lui passe un chiffre ou un vecteur de chiffres.
+
+Si on souhaite sélectionner la 345e ligne du tableau airports :
+
+```{r}
+slice(airports, 345)
+slice(airports, 1:5)
+
+```
+
+Interet de l'utilisation avec group_by ++
+
+
+## Filter rows with filter()
+
+**filter()** allows you to subset observations based on their values. The first argument is the name of the data frame. The second and subsequent arguments are the expressions that filter the data frame
+
+
+```{r}
+first_january <-filter(flights, month == 1, day == 1)
+flights  %>%  filter(distance == max(distance))
+flights  %>%  filter( dep_delay >= 10 & dep_delay <= 15)
+```
+
+-Utilisation des comparateurs : R provides the standard suite: *>*, *>=*, *<*, *<=*, *!=* (not equal), and *==* (equal)
+
+-Utilisation des opétateurs logiques :  *&* is “and”, *|* is “or”, and *!* is “not”
+
+-Another useful dplyr filtering helper is between(). What does it do?
+
+## A vous de jouer : 
+- Vols du 25 décembre
+- Vols de nov ou decembre
+- Vols avec un retard au départ et arrivée inférieur à 2h
+- Vols avec un retard au départ entre 1h et 3h
+
+## Valeurs manquantes : NA
+
+**is.na(x)**
+```{r}
+df <- tibble(x = c(1, NA, 3))
+df
+filter(df, is.na(x) | x > 1)
+```
+
+Exercice : Enlever de df les valeurs manquantes
+
+## Arrange rows with arrange()
+
+**arrange()** works similarly to filter() except that instead of selecting rows, it changes their order. If you provide more than one column name, each additional column will be used to break ties in the values of preceding columns. Use desc() to re-order by a column in descending order.
+```{r}
+arrange(flights, year, month, day)
+arrange(flights, desc(dep_delay))
+
+#les 3 vols avec le plus de retard
+flights %>%  arrange(desc(dep_delay)) %>%  slice( 1:3)
+```
+
+## Select columns with select()
+
+It’s not uncommon to get datasets with hundreds or even thousands of variables. In this case, the first challenge is often narrowing in on the variables you’re actually interested in. select() allows you to rapidly zoom in on a useful subset using operations based on the names of the variables.
+There are a number of helper functions you can use within select():
+- starts_with("abc"): matches names that begin with “abc”.
+- ends_with("xyz"): matches names that end with “xyz”.
+- contains("ijk"): matches names that contain “ijk”.
+```{r}
+select(flights, year, month, day)
+select(flights, year:day)
+select(flights, -(year:day))
+```
+
+## Select suite
+Renommer une variable
+```{r}
+rename(flights, tail_num = tailnum)
+
+```
+
+Another option is to use select() in conjunction with the everything() helper. This is useful if you have a handful of variables you’d like to move to the start of the data frame.
+```{r}
+select(flights, time_hour, air_time, everything())
+
+```
+
+## Add new variables with mutate()
+
+Besides selecting sets of existing columns, it’s often useful to add new columns that are functions of existing columns. That’s the job of mutate().
+```{r}
+airports <- mutate(airports, alt_m = alt / 3.2808)
+select(airports, name, alt, alt_m)
+
+flights <- mutate(flights, 
+                  distance_km = distance / 0.62137,
+                  vitesse = distance_km / air_time * 60)
+select(flights, distance, distance_km, vitesse)
+
+flights <- mutate(flights,
+                  type_retard = case_when(
+                    dep_delay > 0 & arr_delay > 0 ~ "Retard départ et arrivée",
+                    dep_delay > 0 & arr_delay <= 0 ~ "Retard départ",
+                    dep_delay <= 0 & arr_delay > 0 ~ "Retard arrivée",
+                    TRUE ~ "Aucun retard"))
+```
+
+cf https://r4ds.had.co.nz/transform.html#mutate-funs
+
+## Grouped summaries with summarise()
+
+Un élément très important de dplyr est la fonction group_by. Elle permet de définir des groupes de lignes à partir des valeurs d’une ou plusieurs colonnes. Par exemple, on peut grouper les vols selon leur mois.
+Par défaut ceci ne fait rien de visible, à part l’apparition d’une mention Groups dans l’affichage du résultat. Mais à partir du moment où des groupes ont été définis, les verbes comme slice, mutate ou summarise vont en tenir compte lors de leurs opérations.
+Par exemple, si on applique slice à un tableau préalablement groupé, il va sélectionner les lignes aux positions indiquées pour chaque groupe. Ainsi la commande suivante affiche le premier vol de chaque mois, selon leur ordre d’apparition dans le tableau :
+```{r}
+flights %>% group_by(month) %>% slice(1)
+```
+
+## Group_by suite
+Idem pour mutate : les opérations appliquées lors du calcul des valeurs des nouvelles colonnes sont aplliquée groupe de lignes par groupe de lignes. Dans l’exemple suivant, on ajoute une nouvelle colonne qui contient le retard moyen du mois correspondant :
+```{r}
+flights %>% 
+  group_by(month) %>% 
+  mutate(mean_delay_month = mean(dep_delay, na.rm = TRUE)) %>% 
+  select(dep_delay, month, mean_delay_month)
+
+```
+
+group_by peut aussi être utile avec filter, par exemple pour sélectionner les vols avec le retard au départ le plus important pour chaque mois :
+```{r}
+flights %>% 
+  group_by(month) %>% 
+  filter(dep_delay == max(dep_delay, na.rm = TRUE))
+
+```
+
+
+##Summarise et count
+summarise permet d’agréger les lignes du tableau en effectuant une opération “résumée” sur une ou plusieurs colonnes. Cette fonction est en général utilisée avec group_by, puisqu’elle permet du coup d’agréger et résumer les lignes du tableau groupe par groupe. Si on souhaite calculer le délai maximum, le délai minimum et le délai moyen au départ pour chaque mois, on pourra faire :
+```{r}
+flights %>%
+  group_by(month) %>%
+  summarise(max_delay = max(dep_delay, na.rm=TRUE),
+            min_delay = min(dep_delay, na.rm=TRUE),
+            mean_delay = mean(dep_delay, na.rm=TRUE))
+```
+
+summarise dispose d’un opérateur spécial, n(), qui retourne le nombre de lignes du groupe. Ainsi si on veut le nombre de vols par destination, on peut utiliser :
+```{r}
+flights %>%
+  group_by(dest) %>%
+  summarise(nb = n())
+```
+
+À noter que quand on veut compter le nombre de lignes par groupe, on peut utiliser directement la fonction count. Ainsi le code suivant est identique au précédent :
+```{r}
+flights %>%
+  count(dest)
+```
+
+## Grouper selon plusieurs variables
+On peut grouper selon plusieurs variables à la fois, il suffit de les indiquer dans la clause du group_by :
+```{r}
+flights %>%
+  group_by(month, dest) %>%
+  count()
+```
+
+On peut utiliser plusieurs opérations de groupage dans le même pipeline. Ainsi, si on souhaite déterminer le couple origine/destination ayant le plus grand nombre de vols selon le mois de l’année, on devra procéder en deux étapes :
+
+d’abord grouper selon mois, origine et destination pour calculer le nombre de vols
+puis grouper uniquement selon le mois pour sélectionner la ligne avec la valeur maximale.
+Au final, on obtient le code suivant :
+```{r}
+flights %>%
+  group_by(month, origin, dest) %>%
+  summarise(nb = n()) %>%
+  group_by(month) %>%
+  filter(nb == max(nb))
+```
+
+## group_by suite
+
+In this case, where missing values represent cancelled flights, we could also tackle the problem by first removing the cancelled flights. We’ll save this dataset so we can reuse it in the next few examples.
+```{r}
+not_cancelled <- flights %>% 
+  filter(!is.na(dep_delay), !is.na(arr_delay))
+
+not_cancelled %>% 
+  group_by(year, month, day) %>% 
+  summarise(mean = mean(dep_delay))
+
+# When do the first and last flights leave each day?
+not_cancelled %>% 
+  group_by(year, month, day) %>% 
+  summarise(
+    first = min(dep_time),
+    last = max(dep_time)
+  )
+# How many flights left before 5am? (these usually indicate delayed
+# flights from the previous day)
+not_cancelled %>% 
+  group_by(year, month, day) %>% 
+  summarise(n_early = sum(dep_time < 500))
+
+# What proportion of flights are delayed by more than an hour?
+not_cancelled %>% 
+  group_by(year, month, day) %>% 
+  summarise(hour_prop = mean(arr_delay > 60))
+```
+
+
+## ungroup
+On peut à tout moment “dégrouper” un tableau à l’aide de ungroup. Ce serait par exemple nécessaire, dans l’exemple précédent, si on voulait calculer le pourcentage sur le nombre total de vols plutôt que sur le nombre de vols par mois :
+```{r}
+flights %>%
+  group_by(month, dest) %>%
+  summarise(nb = n()) %>% 
+  ungroup() %>% 
+  mutate(pourcentage = nb / sum(nb) * 100)
+
+```
+
+## distinct
+
+distinct filtre les lignes du tableau pour ne conserver que les lignes distinctes, en supprimant toutes les lignes en double.
+```{r}
+flights %>%
+  select(day, month) %>%
+  distinct
+
+flights %>%
+  distinct(month, day)
+
+#pour conserver ensemble des colonnes
+flights %>%
+  distinct(month, day, .keep_all = TRUE) 
+```
+
+
+## Exercices
+```{r}
+pg <- read_table2(file.choose())
+```
+
+- Dans la base de donnée perte du greffon, sélectionner les patients A02, A36 et A49
+- Sélectionner les patients avec une pente de créatinine comprise entre -1 et -4 ml/min/année
+- Sélectionner les patients avec les ages extremes
+- Créer une nouvelle variable temps d'ischémie froide en jour et créer une variable log de cette dernière et sélecitonner uniquement la colonne id et ces 2 colonnes crées
+- Créer une variable age_cat avec 4 catégories de 0 à 30 ans, de 31 à 50, de 51 à 70 et >70 ans
+- Donner le nombre de patient pour chaque haplotype et rejet aigu (séparemment puis les 2 conditions) et la moyenne de pente de créat par haplotype et par rejet aigu.
+- Faire un résumé du temps d'ischémie froide (min, max, mean, sd) par CYP3A5 du donneur
+- Faire un résumé du nombre de donneur (il y en a moins que de receveurs) cf summarise et n_distinct
+- Donner le nombre et la proportion de valeurs de pente de créatinine positive (utiliser sum et mean dans summarise)
+
+## Corrections
+Dans la base de donnée perte du greffon, sélectionner les patients A02, A36 et A49
+```{r}
+pg %>% filter(id %in% c("A02", "A36" , "A49"))
+```
+
+## Corrections
+Sélectionner les patients avec une pente de créatinine comprise entre -1 et -4 ml/min/année et les ordonner par valeur croissante
+```{r}
+pg %>% filter(pente_creat >= -4 & pente_creat <= -1) %>% arrange(pente_creat)
+```
+
+## Corrections
+Sélectionner les patients avec les ages extremes
+```{r}
+pg %>% filter(age_r == max(age_r) | age_r == min(age_r) )
+```
+
+## Corrections
+Créer une nouvelle variable temps d'ischémie froide en jour et créer une variable log de cette dernière et sélecitonner uniquement la colonne id et ces 2 colonnes crées
+```{r}
+pg %>% mutate(tif_j = TIF/24,log_tif_j = log(tif_j)) %>% select(id, tif_j,log_tif_j)
+```
+
+## Corrections
+Créer une variable age_cat avec 4 catégories de 0 à 30 ans, de 31 à 50, de 51 à 70 et >70 ans
+```{r}
+pg %>% mutate(age_r_cat = case_when(
+  between(age_r , 0, 30) ~ "0-30",
+    between(age_r , 31, 50) ~ "31-50",
+    between(age_r , 51, 70) ~ "51-70",
+    TRUE ~ ">70")) %>% count(age_r_cat)
+
+
+```
+
+## Corrections
+Donner le nombre de patient pour chaque haplotype et rejet aigu (séparemment puis les 2 conditions) et la moyenne de pente de créat par haplotype et par rejet aigu.
+```{r}
+pg %>% group_by(haplotype) %>% count()
+pg %>% group_by(rejet_aigu) %>% count()
+pg %>% group_by(haplotype,rejet_aigu) %>% count()
+pg %>% group_by(haplotype) %>% summarise(mean_pente_creat = mean(pente_creat))
+```
+
+## Corrections
+Faire un résumé du temps d'ischémie froide (min, max, mean, sd) par CYP3A5 du donneur
+```{r}
+pg %>% group_by(cyp3A5D) %>% summarise(
+  mean =mean(TIF),
+  sd = sd(TIF),
+  min = min(TIF),
+  max = max(TIF))
+```
+
+## Corrections
+S'assurer qu'il n'y a pas de doublon dans les id cf summarise et n_distinct
+```{r}
+pg %>% summarise(id_distincts = n_distinct(id))
+pg %>% summarise(id = n())
+```
+
+## Corrections
+Donner le nombre et la proportion de valeurs de pente de créatinine positive (utiliser sum et mean dans summarise)
+```{r}
+pg %>% summarise(creat_pos_n = sum(pente_creat >0))
+pg %>% summarise(creat_pos_prop = mean(pente_creat >0)*100)
+```
